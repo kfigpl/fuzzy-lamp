@@ -1,0 +1,49 @@
+# Builds GTAV.app (gtav-recomp, branch issue-fixes, incl. commit c169a5a) on a GitHub macOS runner
+# (Apple silicon), so your own Mac needs no space for the build. No game files are involved: the
+# package only contains the runtime and tools; your Mac builds the game library at Install.
+#
+# Put this file at .github/workflows/build-mac.yml and build_gtav_mac_issue_fixes.sh at the repo
+# root, in a PUBLIC repository (standard runners are free there). Then: Actions -> "Build GTAV.app
+# for Mac" -> Run workflow. The result is the artifact "GTAV-macos-arm64" at the bottom of the run.
+name: Build GTAV.app for Mac
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "gtav-recomp branch or commit"
+        default: "issue-fixes"
+        required: true
+
+jobs:
+  build:
+    runs-on: macos-15          # arm64 (M1), 3 cores, 7 GB RAM
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disk before
+        run: df -h /
+
+      - name: Tools
+        run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+      - name: Build GTAV.app
+        env:
+          WORK: ${{ runner.temp }}/gtav-recomp
+          BRANCH: ${{ inputs.branch }}
+          JOBS: "3"              # 7 GB RAM: more parallel jobs can run out of memory
+        run: sh build_gtav_mac_issue_fixes.sh
+
+      - name: Disk after
+        if: always()
+        run: df -h / && du -sh "${{ runner.temp }}/gtav-recomp" || true
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: GTAV-macos-arm64
+          path: ${{ runner.temp }}/gtav-recomp/dist/*.zip
+          compression-level: 0   # already a zip
+          retention-days: 7
+          if-no-files-found: error
